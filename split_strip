@@ -1,0 +1,195 @@
+#include <Adafruit_NeoPixel.h>
+
+unsigned long previousButtMillis; // used to protect button debounce
+enum direction { FORWARD, REVERSE };
+enum pattern { NONE, RAINBOW_CYCLE};
+#define PIN 6
+#define NUM_LEDS 193
+#define BRIGHTNESS 100
+
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRBW + NEO_KHZ800);
+
+byte neopix_gamma[] = {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
+    1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
+    2,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  5,  5,  5,
+    5,  6,  6,  6,  6,  7,  7,  7,  7,  8,  8,  8,  9,  9,  9, 10,
+   10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16,
+   17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25,
+   25, 26, 27, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36,
+   37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 50,
+   51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68,
+   69, 70, 72, 73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89,
+   90, 92, 93, 95, 96, 98, 99,101,102,104,105,107,109,110,112,114,
+  115,117,119,120,122,124,126,127,129,131,133,135,137,138,140,142,
+  144,146,148,150,152,154,156,158,160,162,164,167,169,171,173,175,
+  177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
+  215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
+
+
+
+class Line {
+  // class variables
+  int numLED;
+  int shift;
+
+  public: // class stuff that can be called from anywhere
+    long Interval;
+    unsigned long lastUpdate;
+    pattern ActivePattern;
+    direction Direction;
+    uint32_t Color1, Color2;  // What colors are in use
+    uint16_t TotalSteps;
+    uint16_t Index;
+    void (*OnComplete)();  // Callback on completion of pattern
+
+  // Constructor
+  Line(int ledCount, int shifter, void (*callback)()){
+    numLED = ledCount;
+    shift = shifter;
+    lastUpdate = 0;
+    { OnComplete = callback; }
+  }
+  // general update, calls specific update based on ActivePattern
+  void Update(unsigned long currentMillis){
+    if(currentMillis - lastUpdate >= Interval) {
+      lastUpdate = currentMillis;
+      switch(ActivePattern){
+        case RAINBOW_CYCLE:
+          RainbowCycleUpdate();
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  // increments the index plus or minus one depending on direction
+  void Increment(){
+        if (Direction == FORWARD){
+           Index++;
+           if (Index >= TotalSteps){
+                Index = 0;
+                if (OnComplete != NULL){
+                    OnComplete(); // call the comlpetion callback
+                }
+            }
+        }
+        else{ // Direction == REVERSE
+            --Index;
+            if (Index <= 0){
+                Index = TotalSteps-1;
+                if (OnComplete != NULL){
+                    OnComplete(); // call the comlpetion callback
+                }
+            }
+        }
+    }
+  // INITIALIZERS
+  // Initialize for a RainbowCycle
+    void RainbowCycle(uint8_t interval, direction dir = FORWARD){
+        ActivePattern = RAINBOW_CYCLE;
+        Interval = interval;
+        TotalSteps = 255;
+        Index = 0;
+        Direction = dir;
+    }
+
+
+  // UPDATERS
+  // Update the Rainbow Cycle Pattern
+    void RainbowCycleUpdate(){
+        for(int i=shift; i<(numLED + shift); i++){
+            strip.setPixelColor(i, Wheel(((i * 256 / numLED) + Index) & 255));
+        }
+        strip.show();
+        Increment();
+    }
+
+
+  // UTILITIES
+  void Reverse(){
+        if (Direction == FORWARD){
+            Direction = REVERSE;
+            Index = TotalSteps-1;
+        }
+        else{
+            Direction = FORWARD;
+            Index = 0;
+        }
+    }
+  // what to do when externally interupted
+  void ButtStuff(){
+    Serial.println("Butt");
+  }
+  // WHAT TO DO ON COMPLETE
+  void LineComplete(){
+    Reverse();
+  }
+  // wheel for rainbow
+  uint32_t Wheel(byte WheelPos) {
+    WheelPos = 255 - WheelPos;
+    if(WheelPos < 85) {
+     return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+    } else if(WheelPos < 170) {
+      WheelPos -= 85;
+     return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+    } else {
+     WheelPos -= 170;
+     return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+    }
+  }
+};
+
+  void LineComplete();
+  // Construct the classes
+  Line line1(100, 0, &LineComplete);
+  Line line2(93, 100, &LineComplete);
+
+
+
+
+void setup() {
+  // SerialDebugging
+  Serial.begin(9600);           // set up Serial library at 9600 bps
+  Serial.println("Serial Up");
+  //
+  // Millis Interupt to be done every Millis
+  // Timer0 is already used for millis() - we'll just interrupt somewhere
+  // in the middle and call the "Compare A" function below
+  OCR0A = 0xAF;
+  TIMSK0 |= _BV(OCIE0A);
+  //
+  //External Interrupt from Button, when pressed pin 2 becomes grounded
+  pinMode(2, INPUT_PULLUP);
+  attachInterrupt(0, ButtonStuff, FALLING);
+
+  // basic setup
+  strip.begin();
+  line1.RainbowCycle(3, FORWARD);
+  line2.RainbowCycle(3, REVERSE);
+
+}
+
+// This is the millis beat loop, runs 1/millis
+SIGNAL(TIMER0_COMPA_vect)
+{
+  unsigned long currentMillis = millis();
+
+  line1.Update(currentMillis);
+  line2.Update(currentMillis);
+}
+
+void loop() {
+
+}
+
+
+
+void ButtonStuff(){ // called every time a button press is registered, but only once every half second
+  unsigned long currentMillis = millis();
+  if(currentMillis - previousButtMillis >= 600) {
+    previousButtMillis = currentMillis;
+    line1.ButtStuff();
+    }
+}
