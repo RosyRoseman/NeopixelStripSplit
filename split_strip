@@ -7,7 +7,7 @@ enum pattern { NONE, RAINBOW_CYCLE};
 #define NUM_LEDS 193
 #define BRIGHTNESS 100
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRBW + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
 
 byte neopix_gamma[] = {
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -122,10 +122,7 @@ class Line {
   void ButtStuff(){
     Serial.println("Butt");
   }
-  // WHAT TO DO ON COMPLETE
-  void LineComplete(){
-    Reverse();
-  }
+
   // wheel for rainbow
   uint32_t Wheel(byte WheelPos) {
     WheelPos = 255 - WheelPos;
@@ -144,7 +141,7 @@ class Line {
   void LineComplete();
   // Construct the classes
   Line line1(100, 0, &LineComplete);
-  Line line2(93, 100, &LineComplete);
+  Line line2(93, 100, NULL);
 
 
 
@@ -166,7 +163,7 @@ void setup() {
 
   // basic setup
   strip.begin();
-  line1.RainbowCycle(3, FORWARD);
+  line1.RainbowCycle(10, FORWARD);
   line2.RainbowCycle(3, REVERSE);
 
 }
@@ -193,3 +190,12 @@ void ButtonStuff(){ // called every time a button press is registered, but only 
     line1.ButtStuff();
     }
 }
+//------------------------------------------------------------
+//Completion Routines - get called on completion of a pattern
+//------------------------------------------------------------
+  void LineComplete(){
+    line2.Reverse(); // works
+    // self.Reverse();  attempting to call reverse on the object calling lineComplete does not work.
+    // Ideally, LineComplete would be generic, and the same function can be called on any instance
+    // How do you pass self to a function?
+  }
